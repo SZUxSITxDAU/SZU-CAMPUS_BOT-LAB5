@@ -1,0 +1,20 @@
+{
+  "example_courses": [
+    {
+      "code": "CS101",
+      "name": "Introduction to Computer Science",
+      "credits": 3
+    },
+    {
+      "code": "CS201",
+      "name": "Data Structures and Algorithms",
+      "credits": 4
+    },
+    {
+      "code": "ENG102",
+      "name": "Academic English for International Students",
+      "credits": 2
+    }
+  ],
+  "note": "This is a small starter set for the lab; not the full SZU course catalog."
+}
