@@ -4,6 +4,7 @@ Wires together: guardrail -> permission check -> router -> skill -> audit.
 from __future__ import annotations
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from app.runtime.router import route
 from app.governance.guardrail import check_guardrail
@@ -17,6 +18,7 @@ class AgentResponse:
     status: str
     response: str
     duration: float
+    steps: list[dict[str, Any]] | None = None
 
 
 def handle_request(user: str, role: str, message: str, skills: list, llm) -> AgentResponse:
@@ -53,7 +55,8 @@ def handle_request(user: str, role: str, message: str, skills: list, llm) -> Age
         result = skill.run(message, context={"user": user, "role": role, "llm": llm})
         duration = time.perf_counter() - start
         record_event(user=user, skill=skill.name, status=result.status, duration=duration)
-        return AgentResponse(skill=skill.name, status=result.status, response=result.text, duration=duration)
+        steps = result.metadata.get("steps") if result.metadata else None
+        return AgentResponse(skill=skill.name, status=result.status, response=result.text, duration=duration, steps=steps)
     except Exception as exc:  # noqa: BLE001 - governance boundary, must not crash the API
         duration = time.perf_counter() - start
         record_event(user=user, skill=skill.name, status="error", duration=duration)
