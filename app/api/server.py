@@ -24,7 +24,10 @@ from app.skills.composed import ComposedBriefingSkill
 # TranslationSkill and SummarySkill come next because messages like
 # "translate ... university ..." would otherwise get misrouted to CampusSkill,
 # which also triggers on generic words like "university".
-SKILLS = [ComposedBriefingSkill(), TranslationSkill(), SummarySkill(), CampusSkill(), CourseSkill(), LibrarySkill()]
+# CampusSkill is placed LAST among the knowledge skills: its remaining
+# triggers (motto, founded, campus) are still fairly generic, so more
+# specific skills (course, library) get first refusal on any overlap.
+SKILLS = [ComposedBriefingSkill(), TranslationSkill(), SummarySkill(), CourseSkill(), LibrarySkill(), CampusSkill()]
 llm_client = LLMClient()
 
 app = FastAPI(title="CampusBot Agent Harness", version="0.2.0")

@@ -122,6 +122,27 @@ button {
   font-weight: 700;
 }
 
+.role-switch select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.role-switch select:hover {
+  border-color: #b9d9d5;
+  background: var(--teal-soft);
+}
+
+.role-switch select:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
 .quiet-button {
   padding: 9px 13px;
   background: transparent;
