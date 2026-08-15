@@ -18,6 +18,14 @@
         </div>
 
         <div class="topbar-actions">
+          <div class="role-switch">
+            <label class="sr-only" for="roleSelect">Role</label>
+            <select id="roleSelect">
+              <option value="guest" selected>Guest</option>
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
           <div class="connection-status" aria-live="polite">
             <span id="connectionDot" class="status-dot is-checking" aria-hidden="true"></span>
             <span id="connectionLabel">Checking connection</span>

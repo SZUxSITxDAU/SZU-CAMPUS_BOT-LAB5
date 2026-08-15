@@ -6,6 +6,7 @@ const newChatButton = document.getElementById("newChatButton");
 const connectionDot = document.getElementById("connectionDot");
 const connectionLabel = document.getElementById("connectionLabel");
 const welcomeTemplate = document.getElementById("welcomeTemplate");
+const roleSelect = document.getElementById("roleSelect");
 
 let isSending = false;
 
@@ -90,7 +91,7 @@ async function sendMessage(rawMessage) {
     const response = await fetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, role: roleSelect.value, user: roleSelect.value }),
     });
     const data = await response.json();
     typingRow.remove();
@@ -100,7 +101,8 @@ async function sendMessage(rawMessage) {
       return;
     }
 
-    appendMessage("assistant", data.response || "The assistant returned no response.");
+    const label = data.skill ? `Assistant · ${data.skill} · ${data.status}` : "Assistant";
+    appendMessage("assistant", data.response || "The assistant returned no response.", label);
     setConnection(true);
   } catch (error) {
     typingRow.remove();
