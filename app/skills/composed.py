@@ -72,6 +72,13 @@ def _wants_translation(message: str) -> bool:
 # Chinese" IS a knowledge question and must still compose.
 _DIRECT_HANDOFF = re.compile(r"^\s*(translate|翻译)\s*[:：]", re.IGNORECASE)
 
+# "Summarize: <text>" / "Summarize this article: <text>" — a colon shortly
+# after the summarize cue means the user is handing over literal text to
+# condense, not asking about the knowledge base — even when that text happens
+# to mention a knowledge trigger word like "university". Mirrors the
+# translate-handoff rules below; such messages belong to SummarySkill alone.
+_SUMMARY_HANDOFF = re.compile(r"^\s*(summarize|summary|总结)[^:：]{0,30}[:：]", re.IGNORECASE)
+
 # 'Translate "Welcome to Shenzhen University" into Chinese.' — the lab PDF's
 # baseline question 5 and one of the web UI's suggestion buttons. A quoted
 # span right after "translate" is LITERAL text being handed over, exactly
@@ -140,6 +147,10 @@ class ComposedBriefingSkill:
         # fell through to Translation (which has no knowledge to translate) and
         # "Summarize the library info" fell through to Summary (which had no
         # knowledge either, and echoed the request back). Both now compose.
+        if _SUMMARY_HANDOFF.match(message):
+            # Literal text handed over for summarization — SummarySkill's job,
+            # even if the text mentions knowledge trigger words.
+            return False
         touches_knowledge = any(k.can_handle(message) for k in KNOWLEDGE_SKILLS)
         return touches_knowledge and (
             _wants_summary(message) or _translation_requests_composition(message)

@@ -146,6 +146,21 @@ class TestPartialComposition(unittest.TestCase):
             "translate-only request should not invoke the Summary skill",
         )
 
+    def test_summarize_colon_handoff_is_not_hijacked_by_composition(self):
+        """"Summarize: <pasted text>" hands over literal text to condense.
+        It must reach SummarySkill directly, even when the pasted text
+        mentions knowledge trigger words like 'university' — mirroring the
+        translate: handoff rule."""
+        result = handle_request(
+            "u1", "admin",
+            "Summarize: Shenzhen University was established in 1983 and has "
+            "grown into a major comprehensive university with over 40,000 "
+            "students across two campuses.",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "summary")
+        self.assertEqual(result.status, "success")
+
     def test_chain_steps_run_without_session_history(self):
         """Regression: session history passed into the chain's internal steps
         made the model blend the PREVIOUS answer into the knowledge step
