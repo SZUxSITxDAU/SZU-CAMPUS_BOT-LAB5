@@ -42,5 +42,9 @@ class LibrarySkill:
         user_prompt = f"Knowledge:\n{json.dumps(knowledge, ensure_ascii=False)}\n\nQuestion:\n{message}"
         history = context.get("history", [])
         text = llm.chat(system_prompt, user_prompt, history=history)
-        status = "unavailable" if "not available" in text.lower() else "success"
+        # The model sometimes paraphrases the refusal sentence; catch the
+        # common variants so a refusal is never misreported as success.
+        refusals = ("not available", "not mentioned", "not specified", "not provided",
+                    "not stated", "does not contain", "no information", "no mention")
+        status = "unavailable" if any(r in text.lower() for r in refusals) else "success"
         return SkillResult(text=text, skill=self.name, status=status)

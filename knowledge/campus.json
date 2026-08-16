@@ -1,7 +1,12 @@
 {
   "name": "Shenzhen University",
   "abbreviation": "SZU",
+  "type": "public comprehensive university",
+  "founded": 1983,
   "established": 1983,
   "motto": "self-reliance, self-discipline, self-improvement",
-  "campuses": ["Yuehai Campus", "Lihu Campus"]
+  "campuses": [
+    "Yuehai Campus",
+    "Lihu Campus"
+  ]
 }
