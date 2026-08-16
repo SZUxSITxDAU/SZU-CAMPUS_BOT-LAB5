@@ -21,7 +21,7 @@ from app.skills.library import LibrarySkill
 from app.skills.summary import SummarySkill
 from app.skills.translation import TranslationSkill, references_future_answer
 
-SUMMARIZE_TRIGGERS = ["summarize", "summary", "brief", "总结"]
+SUMMARIZE_TRIGGERS = ["summarize", "summarise", "summary", "brief", "总结"]
 TRANSLATE_TRIGGERS = ["translate", "in chinese", "into chinese", "翻译"]
 
 # Longer/more specific phrases first, so partial overlaps don't leave debris behind.
@@ -38,6 +38,7 @@ _STRIP_PHRASES = [
     "and translate",
     "translate",
     "summarize",
+    "summarise",
     "summary",
     "brief",
     "总结并翻译成中文",
@@ -77,7 +78,7 @@ _DIRECT_HANDOFF = re.compile(r"^\s*(translate|翻译)\s*[:：]", re.IGNORECASE)
 # condense, not asking about the knowledge base — even when that text happens
 # to mention a knowledge trigger word like "university". Mirrors the
 # translate-handoff rules below; such messages belong to SummarySkill alone.
-_SUMMARY_HANDOFF = re.compile(r"^\s*(summarize|summary|总结)[^:：]{0,30}[:：]", re.IGNORECASE)
+_SUMMARY_HANDOFF = re.compile(r"^\s*(summariz?e|summarise|summary|总结)[^:：]{0,30}[:：]", re.IGNORECASE)
 
 # 'Translate "Welcome to Shenzhen University" into Chinese.' — the lab PDF's
 # baseline question 5 and one of the web UI's suggestion buttons. A quoted

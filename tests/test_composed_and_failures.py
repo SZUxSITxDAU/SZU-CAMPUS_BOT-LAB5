@@ -146,6 +146,22 @@ class TestPartialComposition(unittest.TestCase):
             "translate-only request should not invoke the Summary skill",
         )
 
+    def test_british_spelling_summarise_composes_and_translates(self):
+        """Regression: 'Summarise' (British spelling) matched no trigger at
+        all, so the whole request fell through to the plain library skill —
+        which listed the facts in English and never translated. Both
+        spellings must reach composition, and the translation step must run."""
+        result = handle_request(
+            "u1", "admin",
+            "Summarise the library info and translate it into Chinese",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "composed_briefing")
+        self.assertEqual(result.status, "success")
+        # FakeLLMClient returns Chinese only from the translation prompt,
+        # proving the translation step actually ran.
+        self.assertEqual(result.response, "已翻译内容")
+
     def test_summarize_colon_handoff_is_not_hijacked_by_composition(self):
         """"Summarize: <pasted text>" hands over literal text to condense.
         It must reach SummarySkill directly, even when the pasted text

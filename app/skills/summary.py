@@ -23,7 +23,7 @@ Failure/unavailable behavior:
 from __future__ import annotations
 from app.skills.base import SkillResult
 
-TRIGGERS = ["summarize", "summary", "总结"]
+TRIGGERS = ["summarize", "summarise", "summary", "总结"]
 MIN_CONTENT_LENGTH = 15  # characters, after stripping trigger words
 PASSTHROUGH_MAX_LENGTH = 400  # chars; below this, skip the LLM summarization hop
 
