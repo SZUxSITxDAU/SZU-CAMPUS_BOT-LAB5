@@ -165,6 +165,15 @@ class ComposedBriefingSkill:
         return needed or {self.name}
 
     def run(self, message: str, context: dict) -> SkillResult:
+        # The chain is self-contained: every step receives its input as
+        # explicit text, so session history adds nothing here — and passing
+        # it through actively harms: a prior Q&A in context made the small
+        # model blend the previous answer into the knowledge step (observed
+        # live as "the library's two campuses are Yuehai and Lihu" after a
+        # campuses question). Run every step with a clean, history-free
+        # context.
+        chain_context = {**context, "history": []}
+
         # Step 1: Knowledge Skill — get the underlying facts, using a cleaned
         # question so the model isn't confused by summarize/translate wording.
         knowledge_skill = next((k for k in KNOWLEDGE_SKILLS if k.can_handle(message)), None)
@@ -175,7 +184,7 @@ class ComposedBriefingSkill:
                 status="unavailable",
             )
         knowledge_query = _clean_knowledge_query(message)
-        knowledge_result = knowledge_skill.run(knowledge_query, context)
+        knowledge_result = knowledge_skill.run(knowledge_query, chain_context)
         if knowledge_result.status != "success":
             return SkillResult(text=knowledge_result.text, skill=self.name, status=knowledge_result.status)
 
@@ -193,7 +202,7 @@ class ComposedBriefingSkill:
         # from_composition tells Summary the input is knowledge text, so its
         # short-text passthrough is safe to use here (see summary.py).
         if _wants_summary(message):
-            step_context = {**context, "from_composition": True}
+            step_context = {**chain_context, "from_composition": True}
             summary_result = SummarySkill().run(text, step_context)
             if summary_result.status != "success":
                 return SkillResult(text=summary_result.text, skill=self.name, status=summary_result.status)
@@ -201,7 +210,7 @@ class ComposedBriefingSkill:
 
         # Step 3: Translation Skill — translate what we have, same reasoning.
         if _wants_translation(message):
-            translation_result = TranslationSkill().run(text, context)
+            translation_result = TranslationSkill().run(text, chain_context)
             if translation_result.status != "success":
                 return SkillResult(text=translation_result.text, skill=self.name, status=translation_result.status)
             text = translation_result.text

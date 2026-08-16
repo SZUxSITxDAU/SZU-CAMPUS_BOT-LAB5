@@ -146,6 +146,33 @@ class TestPartialComposition(unittest.TestCase):
             "translate-only request should not invoke the Summary skill",
         )
 
+    def test_chain_steps_run_without_session_history(self):
+        """Regression: session history passed into the chain's internal steps
+        made the model blend the PREVIOUS answer into the knowledge step
+        (observed live: a campuses Q&A before 'Summarize the library info and
+        translate it into Chinese.' produced 'the library's two campuses are
+        Yuehai and Lihu'). Every step's input is explicit text, so the chain
+        must run history-free regardless of what the session context holds."""
+        seen_histories = []
+
+        class HistoryRecordingLLM(FakeLLMClient):
+            def chat(self, system_prompt, user_prompt, history=None):
+                seen_histories.append(list(history or []))
+                return super().chat(system_prompt, user_prompt, history=history)
+
+        poisoned = [
+            {"role": "user", "content": "What are the two campuses?"},
+            {"role": "assistant", "content": "Yuehai Campus and Lihu Campus."},
+        ]
+        result = ComposedBriefingSkill().run(
+            "Summarize the library info and translate it into Chinese.",
+            context={"llm": HistoryRecordingLLM(), "history": poisoned},
+        )
+        self.assertEqual(result.status, "success")
+        self.assertTrue(seen_histories, "chain made no LLM calls")
+        for h in seen_histories:
+            self.assertEqual(h, [], "a chain step received session history")
+
     def test_fragment_query_is_reshaped_into_a_facts_request(self):
         """"Summarize the library info" cleans down to the fragment "the
         library info", which a small model answers with vague commentary

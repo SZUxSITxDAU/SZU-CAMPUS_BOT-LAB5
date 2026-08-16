@@ -31,6 +31,20 @@ def get_history(session_id: str) -> "list[dict]":
     return list(_session_history[session_id])
 
 
+# Only outcomes that are real conversational content belong in memory.
+# Control-plane refusals (blocked / forbidden / unmatched / error) must NOT be
+# recorded: replaying "You do not have access to this skill." as a prior
+# assistant turn poisons later LLM calls — observed live as the translation
+# skill regurgitating its own few-shot example after a guest's denied attempt
+# was retried as member in the same session.
+CONVERSATIONAL_STATUSES = {"success", "unavailable"}
+
+
+def should_record(status: str) -> bool:
+    """True if an exchange with this outcome should enter session memory."""
+    return status in CONVERSATIONAL_STATUSES
+
+
 def record_exchange(session_id: str, user_message: str, assistant_response: str) -> None:
     """Append one user+assistant turn, trimming to the last MAX_TURNS."""
     history = _session_history[session_id]

@@ -69,7 +69,10 @@ def chat(request: ChatRequest) -> ChatResponse:
     result = handle_request(
         request.user, request.role, request.message, SKILLS, llm_client, history=history
     )
-    memory.record_exchange(request.session_id, request.message, result.response)
+    # Governance refusals and errors are not conversation — recording them
+    # would poison the LLM context of every later turn in this session.
+    if memory.should_record(result.status):
+        memory.record_exchange(request.session_id, request.message, result.response)
 
     return ChatResponse(
         request_id=str(uuid.uuid4()),

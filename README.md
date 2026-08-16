@@ -59,7 +59,8 @@ are probed automatically.
 
 ## Tests
 
-43 tests, no Ollama required (deterministic fakes in `tests/fakes.py`):
+51 tests, no Ollama required (deterministic fakes in `tests/fakes.py`),
+including API-level tests of the /chat contract and session-memory hygiene:
 
 ```
 python -m unittest discover -s tests -p "test_*.py" -v
