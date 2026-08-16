@@ -70,7 +70,15 @@ def _wants_translation(message: str) -> bool:
 # That belongs to the Translation skill alone. Note this is deliberately
 # narrower than "starts with translate": "Translate the library address into
 # Chinese" IS a knowledge question and must still compose.
-_DIRECT_HANDOFF = re.compile(r"^\s*(translate|翻译)\s*[:：]")
+_DIRECT_HANDOFF = re.compile(r"^\s*(translate|翻译)\s*[:：]", re.IGNORECASE)
+
+# 'Translate "Welcome to Shenzhen University" into Chinese.' — the lab PDF's
+# baseline question 5 and one of the web UI's suggestion buttons. A quoted
+# span right after "translate" is LITERAL text being handed over, exactly
+# like the colon form, even when the quoted text happens to contain a
+# knowledge trigger word such as "university" (which campus.py matches).
+# Covers straight ("), curly (“ ”), and single quotes.
+_QUOTED_HANDOFF = re.compile(r"^\s*(translate|翻译)[^\"“”']{0,40}[\"“”']", re.IGNORECASE)
 
 
 def _translation_requests_composition(message: str) -> bool:
@@ -80,12 +88,13 @@ def _translation_requests_composition(message: str) -> bool:
 
     Excluded, because each belongs to a different skill:
       - "translate: <text>"        -> Translation (direct text handoff)
+      - 'translate "<text>" ...'   -> Translation (quoted literal handoff)
       - "... answer in chinese"    -> knowledge skill answers in Chinese
       - "... translate it/that"    -> knowledge skill (pronoun, see translation.py)
     """
     if not _wants_translation(message):
         return False
-    if _DIRECT_HANDOFF.match(message):
+    if _DIRECT_HANDOFF.match(message) or _QUOTED_HANDOFF.match(message):
         return False
     return not references_future_answer(message)
 

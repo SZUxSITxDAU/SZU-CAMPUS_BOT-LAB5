@@ -204,6 +204,30 @@ class TestRoutingRegression(unittest.TestCase):
         self.assertEqual(result.skill, "translation")
         self.assertEqual(result.status, "success")
 
+    def test_lab_baseline_quoted_translate_routes_to_translation(self):
+        """Lab PDF Part A Step 3, question 5 — also a web UI suggestion
+        button. The quoted text contains 'university' (a campus trigger),
+        so composition must recognize the quoted span as a literal text
+        handoff and leave this to the Translation skill."""
+        result = handle_request(
+            "u1", "member",
+            'Translate "Welcome to Shenzhen University" into Chinese.',
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "translation")
+        self.assertEqual(result.status, "success")
+
+    def test_curly_quoted_translate_routes_to_translation(self):
+        """Same as above but with the curly quotes the web UI button
+        actually sends (index.html uses “ ”, not straight quotes)."""
+        result = handle_request(
+            "u1", "member",
+            "Translate “Welcome to Shenzhen University” into Chinese.",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "translation")
+        self.assertEqual(result.status, "success")
+
     def test_answer_in_chinese_phrase_routes_to_knowledge_not_translation(self):
         """Regression: 'answer in Chinese' tacked onto a real question must
         route to the knowledge skill (which then answers IN Chinese), not

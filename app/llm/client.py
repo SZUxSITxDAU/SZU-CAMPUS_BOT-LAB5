@@ -14,7 +14,10 @@ import os
 import time
 import httpx
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
+# Default matches the ONLY model bundled in the offline lab package. The
+# launcher sets OLLAMA_MODEL explicitly, but running `python main.py` by
+# hand must not silently point at a model that isn't installed.
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:0.6b")
 CANDIDATE_PORTS = [11434] + list(range(11435, 11446))
 DISCOVERY_TIMEOUT_S = 45.0
 DISCOVERY_POLL_INTERVAL_S = 1.5
