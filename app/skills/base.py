@@ -24,3 +24,16 @@ class Skill(Protocol):
     def run(self, message: str, context: dict) -> "SkillResult":
         """Execute the skill and return a SkillResult."""
         ...
+
+
+CHINESE_HINT_WORDS = ["chinese", "chines", "中文"]  # "chines" covers a real observed typo
+
+
+def wants_chinese_reply(message: str) -> bool:
+    """Detect a language preference like 'answer in Chinese' embedded in an
+    otherwise-normal question, so a knowledge skill can answer directly in
+    Chinese instead of the question being misrouted to the Translation
+    skill (which would just translate the question text itself, not
+    answer it)."""
+    lowered = message.lower()
+    return any(hint in lowered for hint in CHINESE_HINT_WORDS)

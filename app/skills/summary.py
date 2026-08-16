@@ -23,10 +23,18 @@ MIN_CONTENT_LENGTH = 15  # characters, after stripping trigger words
 PASSTHROUGH_MAX_LENGTH = 400  # chars; below this, skip the LLM summarization hop
 
 SYSTEM_PROMPT = (
-    "Summarize the following text in 2-3 concise sentences. "
-    "State the actual facts directly. Do not describe the text abstractly "
-    "(e.g. do not say 'the information is provided' or 'is available') — "
-    "write the real content itself, summarized."
+    "Summarize the following text in 2-3 concise sentences. State the "
+    "actual facts directly, preserving specific names, addresses, and "
+    "numbers. Do not describe the text abstractly (do not say things like "
+    "'the information is provided' or 'is available').\n\n"
+    "Example:\n"
+    "Input: Shenzhen University has two campuses. Yuehai Campus is the main "
+    "campus, established in 1983. Lihu Campus was added later as the "
+    "university expanded and now hosts several engineering colleges.\n"
+    "Output: Shenzhen University has two campuses: Yuehai (the original "
+    "campus, established 1983) and Lihu, which was added later and now "
+    "hosts several engineering colleges.\n\n"
+    "Now summarize the following text the same way:"
 )
 
 
@@ -59,7 +67,8 @@ class SummarySkill:
             return SkillResult(text=message.strip(), skill=self.name, status="success")
 
         llm = context["llm"]
-        text = llm.chat(SYSTEM_PROMPT, message)
+        history = context.get("history", [])
+        text = llm.chat(SYSTEM_PROMPT, message, history=history)
         if not text.strip():
             return SkillResult(
                 text="Summary failed: the model returned no output.",

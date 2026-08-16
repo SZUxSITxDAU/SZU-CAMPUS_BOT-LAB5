@@ -19,7 +19,18 @@ class AgentResponse:
     duration: float
 
 
-def handle_request(user: str, role: str, message: str, skills: list, llm) -> AgentResponse:
+def handle_request(
+    user: str,
+    role: str,
+    message: str,
+    skills: list,
+    llm,
+    history: "list[dict] | None" = None,
+) -> AgentResponse:
+    """history, if given, is prior conversation turns for this session (see
+    app/runtime/memory.py), passed through to whichever skill runs via
+    context["history"] so its LLM call has recent context. Optional and
+    defaults to None — existing callers that don't pass it are unaffected."""
     start = time.perf_counter()
 
     guard = check_guardrail(message)
@@ -50,7 +61,10 @@ def handle_request(user: str, role: str, message: str, skills: list, llm) -> Age
         )
 
     try:
-        result = skill.run(message, context={"user": user, "role": role, "llm": llm})
+        result = skill.run(
+            message,
+            context={"user": user, "role": role, "llm": llm, "history": history or []},
+        )
         duration = time.perf_counter() - start
         record_event(user=user, skill=skill.name, status=result.status, duration=duration)
         return AgentResponse(skill=skill.name, status=result.status, response=result.text, duration=duration)

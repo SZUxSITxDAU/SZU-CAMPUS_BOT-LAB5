@@ -41,7 +41,7 @@ class TestComposedBriefing(unittest.TestCase):
         repeated input with the real local model."""
 
         class ConfusableLLM:
-            def chat(self, system_prompt, user_prompt):
+            def chat(self, system_prompt, user_prompt, history=None):
                 lowered = user_prompt.lower()
                 if "translate" in lowered or "summarize" in lowered:
                     return "That information is not available in the starter knowledge base."
@@ -55,21 +55,22 @@ class TestComposedBriefing(unittest.TestCase):
         self.assertEqual(result.status, "success")
         self.assertNotIn("not available", result.response.lower())
 
-    def test_composed_chain_preserves_full_content_through_translation(self):
-        """Regression: short, already-concise knowledge answers must skip
-        the summarization hop and pass through UNCHANGED to translation,
-        rather than being re-compressed into vague meta-commentary
-        (observed in practice as e.g. '知识库中包含图书馆信息' instead of an
-        actual translated address)."""
+    def test_composed_chain_uses_literal_skill_calls_with_few_shot_prompts(self):
+        """The composed chain genuinely calls Knowledge -> Summary ->
+        Translation skills in sequence (matching the PDF's Bonus 3 diagram
+        literally). For already-short content, Summary passes through
+        unchanged (see summary.py) rather than risking degradation, so this
+        typically produces 2 real LLM calls (knowledge + translation), and
+        the full content must survive intact into the final translation."""
 
         class TrackingLLM:
             def __init__(self):
                 self.calls = []
 
-            def chat(self, system_prompt, user_prompt):
+            def chat(self, system_prompt, user_prompt, history=None):
                 self.calls.append((system_prompt, user_prompt))
                 if "translate" in system_prompt.lower():
-                    return f"[TRANSLATED]: {user_prompt}"
+                    return "深圳大学图书馆的地址是深圳市南山区南海大道3688号。"
                 return (
                     "The main branches of Shenzhen University Library are the North "
                     "Library in Huidian Building, Yuehai Campus, the South Library in "
@@ -85,14 +86,13 @@ class TestComposedBriefing(unittest.TestCase):
             SKILLS, llm,
         )
         self.assertEqual(result.status, "success")
-        # Only 2 LLM calls: knowledge lookup + translation.
-        # No separate summarization hop for content this short.
-        self.assertEqual(len(llm.calls), 2)
-        knowledge_answer = llm.calls[0][1]
-        translation_input = llm.calls[1][1]
-        # The full knowledge answer must survive unshortened into translation.
+        self.assertEqual(len(llm.calls), 2)  # knowledge + translation (summary passthrough)
+        translation_input = llm.calls[-1][1]
         self.assertIn("Nanhai Avenue", translation_input)
         self.assertIn("Central Library", translation_input)
+        # The translation system prompt should include the few-shot example.
+        translation_system_prompt = llm.calls[-1][0]
+        self.assertIn("Example:", translation_system_prompt)
 
 
 class TestFailurePaths(unittest.TestCase):
@@ -129,6 +129,45 @@ class TestRoutingRegression(unittest.TestCase):
         )
         self.assertEqual(result.skill, "translation")
         self.assertEqual(result.status, "success")
+
+    def test_answer_in_chinese_phrase_routes_to_knowledge_not_translation(self):
+        """Regression: 'answer in Chinese' tacked onto a real question must
+        route to the knowledge skill (which then answers IN Chinese), not
+        to Translation (which would just translate the question text
+        itself back to the user instead of answering it)."""
+        result = handle_request(
+            "u1", "admin",
+            "What are the main branches of Shenzhen University Library? answer in chinese",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "library")
+
+    def test_translate_the_answer_phrase_routes_to_knowledge_not_translation(self):
+        """Regression: this is worse than the 'answer in chinese' case —
+        Translation has NO knowledge base access, so if it grabs a real
+        question like this, it hallucinates a plausible-looking but
+        completely fabricated answer instead of erroring or refusing.
+        'translate the answer' must be recognized as referring to a
+        FUTURE answer, not text given directly to translate right now."""
+        result = handle_request(
+            "u1", "admin",
+            "What are the main branches of Shenzhen University Library? translate the answer to chinese",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "library")
+
+    def test_translate_it_pronoun_in_same_message_routes_to_knowledge(self):
+        """Regression: 'translate it' with no separate text given (all in
+        one message, e.g. 'What are the branches? and can u translate it
+        into chinese') has nothing for 'it' to refer to except the answer
+        about to be given — must route to the knowledge skill, not
+        Translation. Also covers a real observed typo ('chines')."""
+        result = handle_request(
+            "u1", "admin",
+            "What are the main branches of Shenzhen University Library? and can u translate it into chines",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "library")
 
     def test_library_question_mentioning_university_routes_to_library(self):
         """A library question that happens to contain 'university' (e.g. because

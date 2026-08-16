@@ -9,12 +9,17 @@ const welcomeTemplate = document.getElementById("welcomeTemplate");
 const roleSelect = document.getElementById("roleSelect");
 
 let isSending = false;
+let sessionId = crypto.randomUUID();
 
 function resetConversation() {
   conversation.replaceChildren(welcomeTemplate.content.cloneNode(true));
   messageInput.value = "";
   resizeInput();
   messageInput.focus();
+  // New conversation = new session, so the backend's short-term memory
+  // (see app/runtime/memory.py) starts fresh rather than carrying over
+  // context from the previous chat.
+  sessionId = crypto.randomUUID();
 }
 
 function setConnection(online) {
@@ -91,7 +96,7 @@ async function sendMessage(rawMessage) {
     const response = await fetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, role: roleSelect.value, user: roleSelect.value }),
+      body: JSON.stringify({ message, role: roleSelect.value, user: roleSelect.value, session_id: sessionId }),
     });
     const data = await response.json();
     typingRow.remove();

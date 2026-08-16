@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from config.settings import WEB_ROOT
 from app.llm.client import LLMClient
 from app.runtime.orchestrator import handle_request
+from app.runtime import memory
 from app.skills.campus import CampusSkill
 from app.skills.course import CourseSkill
 from app.skills.library import LibrarySkill
@@ -38,6 +39,7 @@ class ChatRequest(BaseModel):
     user: str = "guest"
     role: str = "guest"
     message: str = Field(min_length=1, max_length=12000)
+    session_id: str = "default"  # see app/runtime/memory.py — per-browser-tab, in-memory only
 
 
 class ChatResponse(BaseModel):
@@ -62,7 +64,13 @@ def health() -> dict[str, str]:
 def chat(request: ChatRequest) -> ChatResponse:
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty.")
-    result = handle_request(request.user, request.role, request.message, SKILLS, llm_client)
+
+    history = memory.get_history(request.session_id)
+    result = handle_request(
+        request.user, request.role, request.message, SKILLS, llm_client, history=history
+    )
+    memory.record_exchange(request.session_id, request.message, result.response)
+
     return ChatResponse(
         request_id=str(uuid.uuid4()),
         skill=result.skill,
