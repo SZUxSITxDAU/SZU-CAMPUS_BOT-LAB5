@@ -50,13 +50,18 @@ def handle_request(
             duration=duration,
         )
 
-    if not check_permission(role, skill.name):
+    # A composing Skill declares the Skills it will actually invoke (see
+    # composed.py's required_skills), and the role must hold every one of
+    # them. Plain Skills are just checked by their own name.
+    required = skill.required_skills(message) if hasattr(skill, "required_skills") else {skill.name}
+    denied = sorted(name for name in required if not check_permission(role, name))
+    if denied:
         duration = time.perf_counter() - start
         record_event(user=user, skill=skill.name, status="forbidden", duration=duration)
         return AgentResponse(
             skill=skill.name,
             status="forbidden",
-            response="You do not have access to this skill.",
+            response=f"You do not have access to this skill: {', '.join(denied)}.",
             duration=duration,
         )
 

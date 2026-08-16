@@ -136,6 +136,25 @@ class ComposedBriefingSkill:
             _wants_summary(message) or _translation_requests_composition(message)
         )
 
+    def required_skills(self, message: str) -> "set[str]":
+        """The Skills this composition will actually invoke for this message.
+
+        Governance checks these instead of the composition's own name, so a
+        role keeps exactly the access the permission table grants it. A member
+        (campus/course/library/translation per the lab's role example) can ask
+        a knowledge question and have the answer translated, because it uses
+        only Skills that member already holds — while a Skill the role does
+        not hold, such as summary, is still refused."""
+        needed = set()
+        knowledge_skill = next((k for k in KNOWLEDGE_SKILLS if k.can_handle(message)), None)
+        if knowledge_skill is not None:
+            needed.add(knowledge_skill.name)
+        if _wants_summary(message):
+            needed.add("summary")
+        if _wants_translation(message):
+            needed.add("translation")
+        return needed or {self.name}
+
     def run(self, message: str, context: dict) -> SkillResult:
         # Step 1: Knowledge Skill — get the underlying facts, using a cleaned
         # question so the model isn't confused by summarize/translate wording.
