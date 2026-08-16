@@ -5,5 +5,4 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WEB_ROOT = ROOT / "web"
 KNOWLEDGE_DIR = ROOT / "knowledge"
-PROMPT_FILE = ROOT / "prompt.txt"
 LOG_DIR = ROOT / "logs"
