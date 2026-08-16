@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 class FakeLLMClient:
-    def chat(self, system_prompt: str, user_prompt: str) -> str:
+    def chat(self, system_prompt: str, user_prompt: str, history: "list[dict] | None" = None) -> str:
         lowered_user = user_prompt.lower()
         lowered_system = system_prompt.lower()
         if "president" in lowered_user or "international office" in lowered_user:
@@ -18,5 +18,5 @@ class FakeLLMClient:
 class EmptyLLMClient:
     """Simulates a model that returns nothing, to test each skill's error path."""
 
-    def chat(self, system_prompt: str, user_prompt: str) -> str:
+    def chat(self, system_prompt: str, user_prompt: str, history: "list[dict] | None" = None) -> str:
         return ""

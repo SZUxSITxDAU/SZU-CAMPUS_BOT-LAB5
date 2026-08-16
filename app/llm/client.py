@@ -14,7 +14,10 @@ import os
 import time
 import httpx
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:1.7b")
+# Default matches the ONLY model bundled in the offline lab package. The
+# launcher sets OLLAMA_MODEL explicitly, but running `python main.py` by
+# hand must not silently point at a model that isn't installed.
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:0.6b")
 CANDIDATE_PORTS = [11434] + list(range(11435, 11446))
 DISCOVERY_TIMEOUT_S = 45.0
 DISCOVERY_POLL_INTERVAL_S = 1.5
@@ -61,14 +64,21 @@ class LLMClient:
     def __init__(self, model: str = OLLAMA_MODEL):
         self.model = model
 
-    def chat(self, system_prompt: str, user_prompt: str) -> str:
+    def chat(self, system_prompt: str, user_prompt: str, history: "list[dict] | None" = None) -> str:
+        """history, if given, is a list of {"role": "user"/"assistant", "content": str}
+        dicts representing prior turns in this conversation, inserted between
+        the system prompt and the new user message using Ollama's native
+        multi-turn format. Optional and defaults to no history — existing
+        callers that don't pass it behave exactly as before."""
         base = _discover_ollama_base()
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_prompt})
+
         payload = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": messages,
             "stream": False,
             "think": False,
             "options": {"temperature": 0.0, "num_ctx": 4096, "seed": 42},

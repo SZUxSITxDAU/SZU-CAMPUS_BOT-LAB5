@@ -2,13 +2,18 @@
 Also used as the middle step of the Bonus 3 composition chain
 (Knowledge Skill -> Summary Skill -> Translation Skill), see composed.py.
 
-Design note: for content that is already short (typical of our factual
-knowledge-base answers, ~300 chars), this skill passes the text through
-UNCHANGED instead of calling the LLM. Chaining a small local model through
-an extra summarization hop on already-concise text tends to lose real
-content and drift into vague meta-commentary (e.g. "the information is
-available") — passthrough avoids that failure mode while still genuinely
-summarizing longer input when summarization would actually help.
+Design note: when composed.py hands this skill a short knowledge answer
+(typically ~300 chars), it passes the text through UNCHANGED instead of
+calling the LLM. Chaining a small local model through an extra
+summarization hop on already-concise text tends to lose real content and
+drift into vague meta-commentary (e.g. "the information is available") —
+passthrough avoids that failure mode while still genuinely summarizing
+longer input when summarization would actually help.
+
+The passthrough requires context["from_composition"], because it is only
+sound when the input is knowledge text. When this skill runs directly the
+input is the user's own request, and an unconditional passthrough echoed
+that request back as a successful summary.
 
 Failure/unavailable behavior:
 - If there isn't enough text to meaningfully summarize, returns
@@ -23,10 +28,18 @@ MIN_CONTENT_LENGTH = 15  # characters, after stripping trigger words
 PASSTHROUGH_MAX_LENGTH = 400  # chars; below this, skip the LLM summarization hop
 
 SYSTEM_PROMPT = (
-    "Summarize the following text in 2-3 concise sentences. "
-    "State the actual facts directly. Do not describe the text abstractly "
-    "(e.g. do not say 'the information is provided' or 'is available') — "
-    "write the real content itself, summarized."
+    "Summarize the following text in 2-3 concise sentences. State the "
+    "actual facts directly, preserving specific names, addresses, and "
+    "numbers. Do not describe the text abstractly (do not say things like "
+    "'the information is provided' or 'is available').\n\n"
+    "Example:\n"
+    "Input: Shenzhen University has two campuses. Yuehai Campus is the main "
+    "campus, established in 1983. Lihu Campus was added later as the "
+    "university expanded and now hosts several engineering colleges.\n"
+    "Output: Shenzhen University has two campuses: Yuehai (the original "
+    "campus, established 1983) and Lihu, which was added later and now "
+    "hosts several engineering colleges.\n\n"
+    "Now summarize the following text the same way:"
 )
 
 
@@ -55,11 +68,16 @@ class SummarySkill:
 
         # Already concise — pass through unchanged rather than risk an LLM
         # hop degrading real content into vague commentary.
-        if len(message.strip()) <= PASSTHROUGH_MAX_LENGTH:
+        # Only valid when composed.py handed us KNOWLEDGE TEXT. Reached
+        # directly, the input is the user's own request, and passing it
+        # through echoed the request back as a successful "summary"
+        # (e.g. "Summarize the library info" -> "Summarize the library info").
+        if context.get("from_composition") and len(message.strip()) <= PASSTHROUGH_MAX_LENGTH:
             return SkillResult(text=message.strip(), skill=self.name, status="success")
 
         llm = context["llm"]
-        text = llm.chat(SYSTEM_PROMPT, message)
+        history = context.get("history", [])
+        text = llm.chat(SYSTEM_PROMPT, message, history=history)
         if not text.strip():
             return SkillResult(
                 text="Summary failed: the model returned no output.",
