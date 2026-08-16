@@ -40,8 +40,14 @@ class LibrarySkill:
             # question text itself instead of answering it.
             system_prompt = system_prompt + " Reply in Chinese."
         user_prompt = f"Knowledge:\n{json.dumps(knowledge, ensure_ascii=False)}\n\nQuestion:\n{message}"
-        history = context.get("history", [])
-        text = llm.chat(system_prompt, user_prompt, history=history)
+        # Deliberately NO session history: a knowledge answer depends only on
+        # the knowledge file and the question. Passing prior turns made the
+        # model continue in whatever language the conversation drifted into
+        # (observed live: 'SZU的 motto 是 ...' after Chinese turns) and made
+        # identical questions give different answers depending on what was
+        # asked before. History serves follow-up transforms (translation),
+        # not knowledge lookup.
+        text = llm.chat(system_prompt, user_prompt)
         # The model sometimes paraphrases the refusal sentence; catch the
         # common variants so a refusal is never misreported as success.
         refusals = ("not available", "not mentioned", "not specified", "not provided",

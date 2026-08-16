@@ -76,8 +76,9 @@ class SummarySkill:
             return SkillResult(text=message.strip(), skill=self.name, status="success")
 
         llm = context["llm"]
-        history = context.get("history", [])
-        text = llm.chat(SYSTEM_PROMPT, message, history=history)
+        # No session history: the text to summarize is fully contained in
+        # the message, and prior turns only invite language/style bleed.
+        text = llm.chat(SYSTEM_PROMPT, message)
         if not text.strip():
             return SkillResult(
                 text="Summary failed: the model returned no output.",

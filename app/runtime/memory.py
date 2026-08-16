@@ -8,11 +8,17 @@ lab's required/bonus tasks, not something the grading rubric asks for):
   web/app.js), not per logged-in user — there's no real auth in this app.
 - Keeps the last MAX_TURNS exchanges per session; older ones are dropped.
 
+Who consumes history, deliberately narrow: ONLY the Translation skill —
+it exists so a follow-up like "translate to chinese" can act on the
+previous answer. Knowledge skills (campus/course/library), summary, and
+the composed chain run history-free: their answers depend only on the
+knowledge files and the message, and passing prior turns into them made
+the model continue in whatever language the conversation drifted into
+and made identical questions give different answers.
+
 Important limitation, worth being upfront about: this app's Skill Router
-is keyword-trigger based, not conversational. Memory here means the LLM
-sees recent turns as CONTEXT when it answers, so pronouns/follow-up
-phrasing make more sense to it — it does NOT mean a follow-up message
-without its own trigger word will route to the right skill. E.g. asking
+is keyword-trigger based, not conversational — a follow-up message
+without its own trigger word will not route anywhere. E.g. asking
 "Where is the library?" then "What about the other campus?" as a
 follow-up still needs "campus" to appear in that second message for the
 router to send it anywhere at all.
