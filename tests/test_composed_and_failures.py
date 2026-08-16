@@ -55,6 +55,45 @@ class TestComposedBriefing(unittest.TestCase):
         self.assertEqual(result.status, "success")
         self.assertNotIn("not available", result.response.lower())
 
+    def test_composed_chain_preserves_full_content_through_translation(self):
+        """Regression: short, already-concise knowledge answers must skip
+        the summarization hop and pass through UNCHANGED to translation,
+        rather than being re-compressed into vague meta-commentary
+        (observed in practice as e.g. '知识库中包含图书馆信息' instead of an
+        actual translated address)."""
+
+        class TrackingLLM:
+            def __init__(self):
+                self.calls = []
+
+            def chat(self, system_prompt, user_prompt):
+                self.calls.append((system_prompt, user_prompt))
+                if "translate" in system_prompt.lower():
+                    return f"[TRANSLATED]: {user_prompt}"
+                return (
+                    "The main branches of Shenzhen University Library are the North "
+                    "Library in Huidian Building, Yuehai Campus, the South Library in "
+                    "Huizhi Building, Yuehai Campus, and the Central Library in Qiming "
+                    "Building, Lihu Campus. The official address is No. 3688 Nanhai "
+                    "Avenue, Nanshan District, Shenzhen, China."
+                )
+
+        llm = TrackingLLM()
+        result = handle_request(
+            "u1", "admin",
+            "Summarize the library info and translate it into Chinese.",
+            SKILLS, llm,
+        )
+        self.assertEqual(result.status, "success")
+        # Only 2 LLM calls: knowledge lookup + translation.
+        # No separate summarization hop for content this short.
+        self.assertEqual(len(llm.calls), 2)
+        knowledge_answer = llm.calls[0][1]
+        translation_input = llm.calls[1][1]
+        # The full knowledge answer must survive unshortened into translation.
+        self.assertIn("Nanhai Avenue", translation_input)
+        self.assertIn("Central Library", translation_input)
+
 
 class TestFailurePaths(unittest.TestCase):
     """Task 1 requirement: predictable failure/unavailable behavior per skill."""
@@ -108,6 +147,29 @@ class TestRoutingRegression(unittest.TestCase):
             SKILLS, self.llm,
         )
         self.assertEqual(result.skill, "course")
+
+    def test_missing_knowledge_question_with_university_reaches_campus_fallback(self):
+        """The PDF's baseline test expects 'Who is the current president of
+        Shenzhen University?' to reach Campus's 'not available' fallback, not
+        go unmatched. 'university' must still route here when nothing more
+        specific (library/course/translate/summarize) also matches."""
+        result = handle_request(
+            "u1", "admin",
+            "Who is the current president of Shenzhen University?",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "campus")
+
+    def test_international_office_question_reaches_campus_fallback(self):
+        """The PDF's other baseline missing-knowledge question has no
+        'university' in it at all, so campus needs an explicit trigger
+        for this exact phrase."""
+        result = handle_request(
+            "u1", "admin",
+            "Where is the International Office?",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "campus")
 
 
 if __name__ == "__main__":

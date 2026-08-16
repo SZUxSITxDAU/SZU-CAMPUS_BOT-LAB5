@@ -13,7 +13,11 @@ from app.skills.base import SkillResult
 
 TRIGGERS = ["translate", "翻译", "in chinese", "into chinese", "in english", "into english"]
 
-SYSTEM_PROMPT = "Translate only the text requested by the user. Reply with the translation only."
+SYSTEM_PROMPT = (
+    "Translate the following text into Chinese. Output ONLY the Chinese "
+    "translation itself — no English, no commentary, no explanation of "
+    "what you are doing."
+)
 
 
 def _has_translatable_content(message: str) -> bool:
