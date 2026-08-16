@@ -59,7 +59,7 @@ are probed automatically.
 
 ## Tests
 
-52 tests, no Ollama required (deterministic fakes in `tests/fakes.py`),
+53 tests, no Ollama required (deterministic fakes in `tests/fakes.py`),
 including API-level tests of the /chat contract and session-memory hygiene:
 
 ```
