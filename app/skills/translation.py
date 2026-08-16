@@ -51,6 +51,14 @@ def _references_something_else(message: str) -> bool:
     lowered = message.lower()
     return any(p in lowered for p in REFERENCE_PHRASES)
 
+
+def references_future_answer(message: str) -> bool:
+    """Public view of the rule above, so composed.py can apply the SAME
+    definition instead of duplicating the phrase list. A message that refers
+    to an answer not yet given belongs to a knowledge skill (which answers
+    directly in Chinese), not to Translation and not to composition."""
+    return _references_something_else(message)
+
 SYSTEM_PROMPT = (
     "Translate the given text into Chinese. Output ONLY the Chinese "
     "translation — no English, no commentary, no description of the text, "

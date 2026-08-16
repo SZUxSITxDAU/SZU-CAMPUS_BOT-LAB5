@@ -19,7 +19,7 @@ from app.skills.campus import CampusSkill
 from app.skills.course import CourseSkill
 from app.skills.library import LibrarySkill
 from app.skills.summary import SummarySkill
-from app.skills.translation import TranslationSkill
+from app.skills.translation import TranslationSkill, references_future_answer
 
 SUMMARIZE_TRIGGERS = ["summarize", "summary", "brief", "总结"]
 TRANSLATE_TRIGGERS = ["translate", "in chinese", "into chinese", "翻译"]
@@ -30,8 +30,11 @@ _STRIP_PHRASES = [
     "translate it into chinese",
     "and translate into chinese",
     "translate into chinese",
+    "and translate to chinese",
+    "translate to chinese",
     "into chinese",
     "in chinese",
+    "to chinese",
     "and translate",
     "translate",
     "summarize",
@@ -50,27 +53,88 @@ _STRIP_PHRASES = [
 KNOWLEDGE_SKILLS = [LibrarySkill(), CourseSkill(), CampusSkill()]
 
 
+def _wants_summary(message: str) -> bool:
+    lowered = message.lower()
+    return any(t in lowered for t in SUMMARIZE_TRIGGERS)
+
+
+def _wants_translation(message: str) -> bool:
+    """Permissive: used INSIDE run() to decide whether to apply the
+    translation step once composition has already been chosen."""
+    lowered = message.lower()
+    return any(t in lowered for t in TRANSLATE_TRIGGERS)
+
+
+# "translate: <text>" (with a colon) is the user handing over a specific piece
+# of text to transform, not asking a question about the knowledge base first.
+# That belongs to the Translation skill alone. Note this is deliberately
+# narrower than "starts with translate": "Translate the library address into
+# Chinese" IS a knowledge question and must still compose.
+_DIRECT_HANDOFF = re.compile(r"^\s*(translate|翻译)\s*[:：]")
+
+
+def _translation_requests_composition(message: str) -> bool:
+    """Stricter: used in can_handle() to decide whether a translation cue is
+    a reason to COMPOSE (answer from knowledge, then translate) rather than
+    to translate text the user supplied directly.
+
+    Excluded, because each belongs to a different skill:
+      - "translate: <text>"        -> Translation (direct text handoff)
+      - "... answer in chinese"    -> knowledge skill answers in Chinese
+      - "... translate it/that"    -> knowledge skill (pronoun, see translation.py)
+    """
+    if not _wants_translation(message):
+        return False
+    if _DIRECT_HANDOFF.match(message):
+        return False
+    return not references_future_answer(message)
+
+
 def _clean_knowledge_query(message: str) -> str:
     """Strip summarize/translate scaffolding so the knowledge skill sees a
     plain factual question instead of a tangled multi-instruction sentence."""
     cleaned = message
     for phrase in _STRIP_PHRASES:
         cleaned = re.sub(re.escape(phrase), "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.strip(" .,:;\"'")
+    # Removing phrases mid-sentence leaves double spaces behind.
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,:;\"'")
     # If stripping left nothing usable, fall back to the original message
     # rather than sending an empty question to the knowledge skill.
-    return cleaned if len(cleaned) >= 3 else message
+    if len(cleaned) < 3:
+        return message
+    return _as_answerable_question(cleaned)
+
+
+_INTERROGATIVE_STARTS = ("what", "where", "when", "who", "which", "how", "why", "list")
+
+
+def _as_answerable_question(cleaned: str) -> str:
+    """Stripping the scaffolding often leaves a noun fragment rather than a
+    question — "Summarize the library info" cleans down to "the library info".
+    Small local models answer a fragment with vague meta-commentary ("the
+    library information is provided in the knowledge base") instead of the
+    facts, so a fragment is reshaped into an explicit request for the facts.
+    Real questions are left exactly as they are."""
+    lowered = cleaned.lower()
+    if "?" in cleaned or lowered.startswith(_INTERROGATIVE_STARTS):
+        return cleaned
+    return f"List all known facts about {cleaned}."
 
 
 class ComposedBriefingSkill:
     name = "composed_briefing"
 
     def can_handle(self, message: str) -> bool:
-        lowered = message.lower()
-        wants_summary = any(t in lowered for t in SUMMARIZE_TRIGGERS)
-        wants_translation = any(t in lowered for t in TRANSLATE_TRIGGERS)
+        # Either transform alone is enough to need this skill, as long as the
+        # message also asks about knowledge-base facts. Requiring BOTH used to
+        # leave two gaps: "What are the courses in SZU? Translate to chinese"
+        # fell through to Translation (which has no knowledge to translate) and
+        # "Summarize the library info" fell through to Summary (which had no
+        # knowledge either, and echoed the request back). Both now compose.
         touches_knowledge = any(k.can_handle(message) for k in KNOWLEDGE_SKILLS)
-        return wants_summary and wants_translation and touches_knowledge
+        return touches_knowledge and (
+            _wants_summary(message) or _translation_requests_composition(message)
+        )
 
     def run(self, message: str, context: dict) -> SkillResult:
         # Step 1: Knowledge Skill — get the underlying facts, using a cleaned
@@ -87,20 +151,31 @@ class ComposedBriefingSkill:
         if knowledge_result.status != "success":
             return SkillResult(text=knowledge_result.text, skill=self.name, status=knowledge_result.status)
 
+        # Steps 2 and 3 are applied only if the user actually asked for them,
+        # so "<knowledge question> translate to chinese" is not forced through
+        # a pointless summarization hop, and a summarize-only request is not
+        # forced through translation.
+        text = knowledge_result.text
+
         # Step 2: Summary Skill — condense the knowledge answer.
         # Pass the text directly, without prefixing literal "summarize:"
         # wording — the skill's own system prompt already tells the model
         # what to do, and embedding the trigger word here risks confusing
         # a small model in exactly the way the knowledge step did.
-        summary_skill = SummarySkill()
-        summary_result = summary_skill.run(knowledge_result.text, context)
-        if summary_result.status != "success":
-            return SkillResult(text=summary_result.text, skill=self.name, status=summary_result.status)
+        # from_composition tells Summary the input is knowledge text, so its
+        # short-text passthrough is safe to use here (see summary.py).
+        if _wants_summary(message):
+            step_context = {**context, "from_composition": True}
+            summary_result = SummarySkill().run(text, step_context)
+            if summary_result.status != "success":
+                return SkillResult(text=summary_result.text, skill=self.name, status=summary_result.status)
+            text = summary_result.text
 
-        # Step 3: Translation Skill — translate the summary, same reasoning.
-        translation_skill = TranslationSkill()
-        translation_result = translation_skill.run(summary_result.text, context)
-        if translation_result.status != "success":
-            return SkillResult(text=translation_result.text, skill=self.name, status=translation_result.status)
+        # Step 3: Translation Skill — translate what we have, same reasoning.
+        if _wants_translation(message):
+            translation_result = TranslationSkill().run(text, context)
+            if translation_result.status != "success":
+                return SkillResult(text=translation_result.text, skill=self.name, status=translation_result.status)
+            text = translation_result.text
 
-        return SkillResult(text=translation_result.text, skill=self.name, status="success")
+        return SkillResult(text=text, skill=self.name, status="success")

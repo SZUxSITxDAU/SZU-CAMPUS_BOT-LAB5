@@ -8,7 +8,7 @@ from app.skills.course import CourseSkill
 from app.skills.library import LibrarySkill
 from app.skills.translation import TranslationSkill
 from app.skills.summary import SummarySkill
-from app.skills.composed import ComposedBriefingSkill
+from app.skills.composed import ComposedBriefingSkill, _clean_knowledge_query
 from tests.fakes import FakeLLMClient, EmptyLLMClient
 
 SKILLS = [ComposedBriefingSkill(), TranslationSkill(), SummarySkill(), CourseSkill(), LibrarySkill(), CampusSkill()]
@@ -93,6 +93,80 @@ class TestComposedBriefing(unittest.TestCase):
         # The translation system prompt should include the few-shot example.
         translation_system_prompt = llm.calls[-1][0]
         self.assertIn("Example:", translation_system_prompt)
+
+
+class TestPartialComposition(unittest.TestCase):
+    """Regression: a knowledge question that asks for only ONE transform
+    (translate OR summarize, not both) must still reach the knowledge base.
+    Composition used to require both trigger types, so these fell through to
+    Translation/Summary, neither of which loads any knowledge."""
+
+    def setUp(self):
+        self.llm = FakeLLMClient()
+
+    def test_knowledge_plus_translate_only_composes(self):
+        result = handle_request(
+            "u1", "admin",
+            "What are the courses in SZU? Translate to chinese",
+            SKILLS, self.llm,
+        )
+        self.assertEqual(result.skill, "composed_briefing")
+        self.assertEqual(result.status, "success")
+        # FakeLLMClient returns Chinese only from the translation prompt, so
+        # this also proves the translation step actually ran.
+        self.assertEqual(result.response, "已翻译内容")
+
+    def test_knowledge_plus_summarize_only_composes(self):
+        result = handle_request("u1", "admin", "Summarize the library info", SKILLS, self.llm)
+        self.assertEqual(result.skill, "composed_briefing")
+        self.assertEqual(result.status, "success")
+
+    def test_summarize_only_request_is_not_echoed_back(self):
+        """The exact echo bug: the summary was the user's own request verbatim."""
+        message = "Summarize the library info"
+        result = handle_request("u1", "admin", message, SKILLS, self.llm)
+        self.assertNotEqual(result.response.strip().lower(), message.lower())
+
+    def test_translate_only_request_does_not_summarize(self):
+        """A translate-only request must skip the summarization hop entirely."""
+        calls = []
+
+        class RecordingLLM(FakeLLMClient):
+            def chat(self, system_prompt, user_prompt, history=None):
+                calls.append(system_prompt)
+                return super().chat(system_prompt, user_prompt, history=history)
+
+        handle_request(
+            "u1", "admin",
+            "What are the courses in SZU? Translate to chinese",
+            SKILLS, RecordingLLM(),
+        )
+        self.assertFalse(
+            any("summarize" in prompt.lower() for prompt in calls),
+            "translate-only request should not invoke the Summary skill",
+        )
+
+    def test_fragment_query_is_reshaped_into_a_facts_request(self):
+        """"Summarize the library info" cleans down to the fragment "the
+        library info", which a small model answers with vague commentary
+        instead of facts. Fragments must become an explicit facts request;
+        real questions must be left untouched."""
+        self.assertEqual(
+            _clean_knowledge_query("Summarize the library info"),
+            "List all known facts about the library info.",
+        )
+        self.assertEqual(
+            _clean_knowledge_query("What are the courses in SZU? Translate to chinese"),
+            "What are the courses in SZU?",
+        )
+
+    def test_summary_reached_directly_does_not_echo_input(self):
+        """Without from_composition, Summary must not pass its input through."""
+        result = SummarySkill().run(
+            "Please condense this paragraph for me.",
+            context={"llm": self.llm, "history": []},
+        )
+        self.assertNotEqual(result.text, "Please condense this paragraph for me.")
 
 
 class TestFailurePaths(unittest.TestCase):
